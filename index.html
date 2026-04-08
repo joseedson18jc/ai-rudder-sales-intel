@@ -433,6 +433,12 @@
   /* ── API KEY MODAL ── */
   .api-key-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 10002; opacity: 0; visibility: hidden; transition: all 0.3s var(--ease-out); }
   .api-key-overlay.active { opacity: 1; visibility: visible; }
+  .model-switcher { position: relative; border: 1px solid var(--accent) !important; }
+  .model-switcher.gemini { border-color: var(--accent2) !important; }
+  .model-switcher .model-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  .model-switcher.gemini .model-dot { background: var(--accent2); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
   .api-key-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); width: 90%; max-width: 440px; padding: 32px; box-shadow: var(--shadow-lg); transform: scale(0.95); opacity: 0; transition: all 0.35s var(--ease-spring); text-align: center; }
   .api-key-overlay.active .api-key-modal { transform: scale(1); opacity: 1; }
   .api-key-modal h3 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
@@ -541,6 +547,10 @@
 <div id="toast-container" class="toast-container"></div>
 
 <div class="top-actions">
+  <button class="action-btn model-switcher" id="modelSwitcherBtn" onclick="toggleAIModel()" title="Switch AI Model" style="width:auto; padding:0 12px; gap:6px; font-size:11px; font-weight:700;">
+    <span id="modelIcon">✨</span>
+    <span id="modelLabel">Claude</span>
+  </button>
   <button class="action-btn lang-btn" onclick="toggleLang()" title="Toggle Language">
     <span class="lang-pt">EN</span>
     <span class="lang-en">PT</span>
@@ -1924,10 +1934,15 @@ Are you available for a quick chat on Tuesday?</div>
 <!-- API KEY SETUP MODAL -->
 <div class="api-key-overlay" id="apiKeyOverlay">
   <div class="api-key-modal">
-    <h3>🔑 <span class="lang-pt">Configurar API Key</span><span class="lang-en">Set API Key</span></h3>
-    <p class="lang-pt">Cole sua chave da Anthropic (começa com <code>sk-ant-</code>) para ativar todos os recursos de IA.</p>
-    <p class="lang-en">Paste your Anthropic key (starts with <code>sk-ant-</code>) to activate all AI features.</p>
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off">
+    <h3>🔑 <span class="lang-pt">Configurar API Keys</span><span class="lang-en">Set API Keys</span></h3>
+    <p class="lang-pt">Configure suas chaves de IA. Pelo menos uma é necessária.</p>
+    <p class="lang-en">Configure your AI keys. At least one is required.</p>
+    <div style="text-align:left; margin-bottom:12px;">
+      <label style="font-size:12px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; margin-bottom:6px;">✨ Claude (Anthropic)</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off" style="margin-bottom:12px;">
+      <label style="font-size:12px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; margin-bottom:6px;">⚡ Gemini (Google)</label>
+      <input type="password" id="geminiKeyInput" placeholder="AIzaSy..." autocomplete="off">
+    </div>
     <button class="api-save-btn" onclick="saveApiKey()"><span class="lang-pt">Salvar e Ativar IA</span><span class="lang-en">Save & Activate AI</span></button>
     <button class="api-skip" onclick="closeApiKeyModal()"><span class="lang-pt">Pular por agora</span><span class="lang-en">Skip for now</span></button>
   </div>
@@ -2303,7 +2318,7 @@ Are you available for a quick chat on Tuesday?</div>
   speechSynth.onvoiceschanged = () => speechSynth.getVoices();
 
   /* ── LOCAL STORAGE PERSISTENCE ── */
-  const STORAGE_KEYS = { theme: 'air_theme', lang: 'air_lang', apiKey: 'air_api_key', checklist: 'air_checklist', timeline: 'air_timeline' };
+  const STORAGE_KEYS = { theme: 'air_theme', lang: 'air_lang', apiKey: 'air_api_key', geminiKey: 'air_gemini_key', aiModel: 'air_ai_model', checklist: 'air_checklist', timeline: 'air_timeline' };
 
   function loadPreferences() {
     const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
@@ -2341,16 +2356,108 @@ Are you available for a quick chat on Tuesday?</div>
 
   /* ── API KEY MANAGEMENT ── */
   function getStoredApiKey() { return localStorage.getItem(STORAGE_KEYS.apiKey) || ''; }
+  function getStoredGeminiKey() { return localStorage.getItem(STORAGE_KEYS.geminiKey) || ''; }
+  function getStoredAIModel() { return localStorage.getItem(STORAGE_KEYS.aiModel) || 'claude'; }
   function saveApiKey() {
-    const key = document.getElementById('apiKeyInput').value.trim();
-    if (!key.startsWith('sk-ant-')) { document.getElementById('apiKeyInput').classList.add('input-error'); setTimeout(() => document.getElementById('apiKeyInput').classList.remove('input-error'), 400); return; }
+    const claudeKey = document.getElementById('apiKeyInput').value.trim();
+    const geminiKey = document.getElementById('geminiKeyInput').value.trim();
+    if (!claudeKey && !geminiKey) { document.getElementById('apiKeyInput').classList.add('input-error'); setTimeout(() => document.getElementById('apiKeyInput').classList.remove('input-error'), 400); return; }
+    if (claudeKey && !claudeKey.startsWith('sk-ant-')) { document.getElementById('apiKeyInput').classList.add('input-error'); setTimeout(() => document.getElementById('apiKeyInput').classList.remove('input-error'), 400); return; }
+    if (geminiKey && !geminiKey.startsWith('AIza')) { document.getElementById('geminiKeyInput').classList.add('input-error'); setTimeout(() => document.getElementById('geminiKeyInput').classList.remove('input-error'), 400); return; }
+    if (geminiKey) { localStorage.setItem(STORAGE_KEYS.geminiKey, geminiKey); GEMINI_KEY = geminiKey; }
+    if (claudeKey) { /* fall through to original logic */ } else { closeApiKeyModal(); updateModelUI(); showToast('Gemini AI activated!', 'success'); return; }
+    const key = claudeKey;
     localStorage.setItem(STORAGE_KEYS.apiKey, key);
     API_KEY = key;
     closeApiKeyModal();
-    showToast(currentLang === 'pt' ? 'API Key salva! IA ativada.' : 'API Key saved! AI activated.');
+    updateModelUI();
+    showToast(currentLang === 'pt' ? 'API Keys salvas! IA ativada.' : 'API Keys saved! AI activated.');
   }
   function closeApiKeyModal() { document.getElementById('apiKeyOverlay').classList.remove('active'); sessionStorage.setItem('air_skipped_key', '1'); }
-  function showApiKeyModal() { document.getElementById('apiKeyOverlay').classList.add('active'); document.getElementById('apiKeyInput').focus(); }
+  function showApiKeyModal() {
+    document.getElementById('apiKeyOverlay').classList.add('active');
+    document.getElementById('apiKeyInput').value = getStoredApiKey();
+    document.getElementById('geminiKeyInput').value = getStoredGeminiKey();
+    document.getElementById('apiKeyInput').focus();
+  }
+
+  /* ── AI MODEL SWITCHER ── */
+  let currentAIModel = getStoredAIModel(); // 'claude' or 'gemini'
+  let GEMINI_KEY = getStoredGeminiKey() || 'AIzaSyAyxwV7l0iBqFvDVY4aNkur2kivlm6iErQ';
+
+  function toggleAIModel() {
+    if (currentAIModel === 'claude') {
+      if (!GEMINI_KEY) { showToast(currentLang === 'pt' ? 'Configure a chave Gemini primeiro' : 'Set Gemini key first', 'error'); showApiKeyModal(); return; }
+      currentAIModel = 'gemini';
+    } else {
+      if (!API_KEY) { showToast(currentLang === 'pt' ? 'Configure a chave Claude primeiro' : 'Set Claude key first', 'error'); showApiKeyModal(); return; }
+      currentAIModel = 'claude';
+    }
+    localStorage.setItem(STORAGE_KEYS.aiModel, currentAIModel);
+    updateModelUI();
+    showToast(currentAIModel === 'claude' ? 'Claude Sonnet ativado ✨' : 'Gemini Flash ativado ⚡', 'success');
+  }
+
+  function updateModelUI() {
+    const btn = document.getElementById('modelSwitcherBtn');
+    const icon = document.getElementById('modelIcon');
+    const label = document.getElementById('modelLabel');
+    if (currentAIModel === 'gemini') {
+      icon.textContent = '⚡';
+      label.textContent = 'Gemini';
+      btn.classList.add('gemini');
+    } else {
+      icon.textContent = '✨';
+      label.textContent = 'Claude';
+      btn.classList.remove('gemini');
+    }
+  }
+
+  // Initialize model UI on load
+  setTimeout(updateModelUI, 100);
+
+  /* ── GEMINI FLASH API ── */
+  const GEMINI_MODEL = 'gemini-2.0-flash';
+
+  async function callGeminiAPI(sys, query, isJson = false, schema = null) {
+    if (!GEMINI_KEY) { showApiKeyModal(); throw new Error('Gemini API key not set'); }
+    const langCtx = currentLang === 'en' ? " Reply strictly in English." : " Responda estritamente em Português do Brasil.";
+    const jsonInstruction = isJson ? buildSchemaPrompt(schema) : '';
+    const systemPrompt = sys + langCtx + jsonInstruction;
+
+    const payload = {
+      contents: [{ parts: [{ text: query }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+        ...(isJson ? { responseMimeType: "application/json" } : {})
+      }
+    };
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('Empty response from Gemini');
+        if (isJson) {
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) throw new Error('No JSON found in Gemini response');
+          return JSON.parse(jsonMatch[0]);
+        }
+        return text;
+      } catch (e) {
+        if (i === 2) throw e;
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+  }
 
   /* ── KEYBOARD SHORTCUTS ── */
   document.addEventListener('keydown', (e) => {
@@ -2459,8 +2566,8 @@ Are you available for a quick chat on Tuesday?</div>
   document.addEventListener('DOMContentLoaded', () => {
     loadPreferences();
     animateCounters();
-    // Show API key modal if no key is stored and it's first visit
-    if (!getStoredApiKey() && !sessionStorage.getItem('air_skipped_key')) {
+    // Show API key modal if no keys are stored and it's first visit
+    if (!getStoredApiKey() && !getStoredGeminiKey() && !sessionStorage.getItem('air_skipped_key')) {
       setTimeout(() => showApiKeyModal(), 1500);
     }
   });
@@ -2488,6 +2595,10 @@ Are you available for a quick chat on Tuesday?</div>
   }
 
   async function callClaudeAPI(sys, query, isJson = false, schema = null) {
+    // Route to active model
+    if (currentAIModel === 'gemini' && GEMINI_KEY) {
+      return callGeminiAPI(sys, query, isJson, schema);
+    }
     if (!API_KEY) { showApiKeyModal(); throw new Error('API key not set'); }
     const langCtx = currentLang === 'en' ? " Reply strictly in English." : " Responda estritamente em Português do Brasil.";
     const jsonInstruction = isJson ? buildSchemaPrompt(schema) : '';
