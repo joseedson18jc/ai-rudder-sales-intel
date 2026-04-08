@@ -2383,14 +2383,20 @@ Are you available for a quick chat on Tuesday?</div>
 
   /* ── AI MODEL SWITCHER ── */
   let currentAIModel = getStoredAIModel(); // 'claude' or 'gemini'
-  let GEMINI_KEY = getStoredGeminiKey() || 'AIzaSyAyxwV7l0iBqFvDVY4aNkur2kivlm6iErQ';
+  let GEMINI_KEY = getStoredGeminiKey() || '';
 
   function toggleAIModel() {
     if (currentAIModel === 'claude') {
-      if (!GEMINI_KEY) { showToast(currentLang === 'pt' ? 'Configure a chave Gemini primeiro' : 'Set Gemini key first', 'error'); showApiKeyModal(); return; }
+      if (!GEMINI_KEY) {
+        showToast(currentLang === 'pt' ? 'Configure a chave Gemini primeiro (ai.google.dev)' : 'Set Gemini key first (ai.google.dev)', 'error');
+        showApiKeyModal(); return;
+      }
       currentAIModel = 'gemini';
     } else {
-      if (!API_KEY) { showToast(currentLang === 'pt' ? 'Configure a chave Claude primeiro' : 'Set Claude key first', 'error'); showApiKeyModal(); return; }
+      if (!API_KEY) {
+        showToast(currentLang === 'pt' ? 'Configure a chave Claude primeiro' : 'Set Claude key first', 'error');
+        showApiKeyModal(); return;
+      }
       currentAIModel = 'claude';
     }
     localStorage.setItem(STORAGE_KEYS.aiModel, currentAIModel);
@@ -2443,7 +2449,12 @@ Are you available for a quick chat on Tuesday?</div>
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        if (data.error) throw new Error(data.error.message);
+        if (data.error) {
+          const code = data.error.code;
+          if (code === 403) throw new Error('Gemini key revoked/invalid. Go to ai.google.dev to generate a new key.');
+          if (code === 429) throw new Error('Gemini quota exceeded. Wait or upgrade plan at ai.google.dev.');
+          throw new Error('Gemini: ' + data.error.message);
+        }
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error('Empty response from Gemini');
         if (isJson) {
