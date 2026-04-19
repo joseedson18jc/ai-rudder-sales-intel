@@ -1,0 +1,14 @@
+{
+  "name": "super-intel-center",
+  "version": "1.0.0",
+  "description": "AIRudder Brazil Sales Team — AI Sales Intelligence Platform (static SPA bundle).",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes serve@latest -l 3000 .",
+    "dev": "npx --yes serve@latest -l 3000 .",
+    "preview": "npx --yes serve@latest -l 3000 ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
