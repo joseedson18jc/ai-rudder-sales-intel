@@ -1,0 +1,38 @@
+name: Validate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON configs
+        run: |
+          for f in vercel.json package.json; do
+            echo "Checking $f"
+            python3 -c "import json,sys; json.load(open('$f'))"
+          done
+
+      - name: Validate YAML workflows
+        run: |
+          python3 -c "import yaml,glob,sys; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]"
+
+      - name: Verify entrypoint exists and is non-empty
+        run: |
+          test -s index.html
+          test -s 404.html
+          echo "index.html: $(wc -c < index.html) bytes"
+          echo "404.html:   $(wc -c < 404.html) bytes"
+
+      - name: Quick HTML sanity check
+        run: |
+          grep -q '<!DOCTYPE html>' index.html
+          grep -q '<title>' index.html
+          grep -q 'id=root' index.html
+          echo "HTML structure OK"
