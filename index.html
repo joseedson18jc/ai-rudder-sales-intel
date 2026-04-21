@@ -9393,7 +9393,7 @@ function toast(msg, kind=''){
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   AUTH · Allowlist of 6 users with SHA-256 password hashes
+   AUTH · Allowlist of 7 users with SHA-256 password hashes
    ▸ joseedson18@hotmail.com   → OWNER    (full admin, can change settings/API keys)
    ▸ cxhead@airudder.com.br    → OWNER    (full admin, can change settings/API keys)
    ▸ bd1@airudder.com          → EMPLOYEE (read+use all, no settings)
@@ -9410,7 +9410,8 @@ const RUDDER_AUTH_USERS = [
   { email:'bd2@airudder.com',        hash:'e655227049dc4b836264c6417ae66e97e968d439e2c6782f3dc89098582fcfb3', role:'employee', name:'BD 2' },
   { email:'pauloheadsa@airudder.com',hash:'5319821d65eb49371b0fcd5007c4ffa1130876aed90ae4befeb64351e40b3a33', role:'employee', name:'Paulo Head' },
   { email:'igor.saleshead@airudder.com', hash:'f8431070e3df42aa2dbca7107a2c0503288a3c7f9fb0bc348a79733d3a6ad2b5', role:'owner',    name:'Igor Sales Head' },
-  { email:'demo@airudder.com.br',    hash:'50c59475639e06fa2220479f58f60c2ee5e453d78873ba15999f79f2e6d84b43', role:'demo',     name:'Demo' }
+  { email:'demo@airudder.com.br',    hash:'50c59475639e06fa2220479f58f60c2ee5e453d78873ba15999f79f2e6d84b43', role:'demo',     name:'Demo' },
+  { email:'andybigboss@brsalesintel.net', hash:'c5b16d94075ca4ae33d28f9c2586677457382d7d4b0a7083fe1127f3dc8390ca', role:'owner',    name:'Andy Bigboss' }
 ];
 async function _sha256Hex(str){
   const buf = new TextEncoder().encode(str);
