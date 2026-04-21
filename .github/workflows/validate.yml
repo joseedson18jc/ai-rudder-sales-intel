@@ -32,7 +32,7 @@ jobs:
 
       - name: Quick HTML sanity check
         run: |
-          grep -q '<!DOCTYPE html>' index.html
+          grep -qi '<!doctype html>' index.html
           grep -q '<title>' index.html
-          grep -q 'id=root' index.html
+          grep -qE 'id="(app|root)"' index.html
           echo "HTML structure OK"
