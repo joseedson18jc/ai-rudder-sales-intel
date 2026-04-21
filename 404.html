@@ -15860,5 +15860,230 @@ window.addEventListener('error', e => console.error('[GLOBAL]', e.message));
 /* icons for initial login card */
 icons();
 </script>
+<script id="smartOrgSearch">
+/* ======================================================================
+   smart-org-search.js — miss-path for the #rankSearch org search bar
+   ----------------------------------------------------------------------
+   Behavior: when the user types a name and no local card matches, show a
+   panel that runs:
+     1) Intel (local) — already a miss, logged for completeness
+     2) Surfe searchOrganizations — pick top hit as seed
+     3) AI (Claude Sonnet 4.6 → Gemini → OpenAI) — canonical company profile
+     4) Claude ICP check — fit/intent/timing scores
+     5) Surfe enrichOrganization — best-effort enrich
+     6) Push into COMPANIES + renderRanking + scroll to new card
+   ====================================================================== */
+(function () {
+  var ready = new Promise(function (res) {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') res();
+    else document.addEventListener('DOMContentLoaded', res, { once: true });
+  });
+
+  ready.then(async function () {
+    for (var i = 0; i < 60; i++) {
+      if (typeof COMPANIES !== 'undefined'
+          && typeof renderRanking === 'function'
+          && typeof applyRankFilters === 'function') break;
+      await new Promise(function (r) { setTimeout(r, 100); });
+    }
+    if (typeof COMPANIES === 'undefined') return;
+
+    var grid = document.getElementById('rankGrid');
+    var search = document.getElementById('rankSearch');
+    if (!grid || !search) return;
+
+    var panel = document.createElement('div');
+    panel.id = 'rankSmartLookup';
+    panel.hidden = true;
+    panel.style.cssText = [
+      'margin-top:14px',
+      'padding:16px 18px',
+      'border-radius:12px',
+      'background:rgba(5,128,189,.06)',
+      'border:1px dashed rgba(5,128,189,.45)',
+      'font-size:14px'
+    ].join(';');
+    panel.innerHTML = [
+      '<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">',
+      '  <div>',
+      '    <div style="font-weight:600;color:#0580BD">',
+      '      <span class="lang-pt">Nenhuma empresa local encontrada</span>',
+      '      <span class="lang-en">No local match</span>',
+      '      <span class="lang-zh">未找到本地匹配</span>',
+      '      — "<span id="rslQuery"></span>"',
+      '    </div>',
+      '    <div style="opacity:.75;margin-top:4px;font-size:13px">',
+      '      <span class="lang-pt">Procurar em Intel → IA → checar ICP AI Rudder → importar e enriquecer via Surfe.</span>',
+      '      <span class="lang-en">Search Intel → AI → Claude ICP check → import &amp; enrich via Surfe.</span>',
+      '      <span class="lang-zh">在 Intel → AI → Claude ICP 校验 → 导入并通过 Surfe 丰富。</span>',
+      '    </div>',
+      '  </div>',
+      '  <button id="rslRun" type="button" style="padding:8px 14px;border-radius:10px;background:#0580BD;color:#fff;border:0;cursor:pointer;font-weight:600;white-space:nowrap">',
+      '    <span class="lang-pt">🚀 Buscar via IA + Surfe</span>',
+      '    <span class="lang-en">🚀 AI + Surfe lookup</span>',
+      '    <span class="lang-zh">🚀 AI + Surfe 查询</span>',
+      '  </button>',
+      '</div>',
+      '<div id="rslLog" style="margin-top:12px;display:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.65;color:#334"></div>'
+    ].join('');
+    grid.parentNode.insertBefore(panel, grid.nextSibling);
+
+    var queryEl = panel.querySelector('#rslQuery');
+    var runBtn = panel.querySelector('#rslRun');
+    var logEl = panel.querySelector('#rslLog');
+
+    function log(html) {
+      logEl.style.display = 'block';
+      var row = document.createElement('div');
+      row.innerHTML = html;
+      logEl.appendChild(row);
+    }
+
+    function parseJsonLoose(raw) {
+      var t = String(raw || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+      try { return JSON.parse(t); }
+      catch (e) {
+        var m = t.match(/\{[\s\S]*\}/);
+        if (m) { try { return JSON.parse(m[0]); } catch (_) {} }
+        return null;
+      }
+    }
+
+    function recomputePanel() {
+      var visible = document.querySelectorAll('#rankGrid .rank-card:not(.is-hidden)').length;
+      var q = (search.value || '').trim();
+      if (q.length >= 3 && visible === 0) {
+        queryEl.textContent = q;
+        panel.hidden = false;
+      } else {
+        panel.hidden = true;
+        logEl.innerHTML = '';
+        logEl.style.display = 'none';
+      }
+    }
+    search.addEventListener('input', function () { setTimeout(recomputePanel, 10); });
+
+    runBtn.addEventListener('click', async function () {
+      var name = (search.value || '').trim();
+      if (!name) return;
+      runBtn.disabled = true;
+      logEl.innerHTML = '';
+      logEl.style.display = 'block';
+      try {
+        log('🔎 <b>Intel</b>: local miss for "' + name + '"');
+
+        var surfeSeed = null;
+        if (typeof Surfe !== 'undefined' && typeof Surfe.searchOrganizations === 'function') {
+          log('🛰️ <b>Surfe</b>: searching organisations…');
+          try {
+            var sres = await Surfe.searchOrganizations({ filters: { names: [name] }, limit: 3 });
+            var slist = (sres && (sres.companies || sres.organizations || sres.results || sres.data)) || [];
+            if (slist.length) {
+              surfeSeed = slist[0];
+              var seedName = surfeSeed.name || surfeSeed.companyName || name;
+              log('&nbsp;&nbsp;↳ Surfe: ' + slist.length + ' candidate(s) · picked "' + seedName + '"');
+            } else {
+              log('&nbsp;&nbsp;↳ Surfe: no matches');
+            }
+          } catch (e) { log('&nbsp;&nbsp;↳ Surfe error: ' + (e && e.message || e)); }
+        }
+
+        if (typeof aiCallWithFallback !== 'function') {
+          log('⛔ AI unavailable. Configure a provider key.');
+          return;
+        }
+
+        log('🤖 <b>AI</b>: asking Claude Sonnet 4.6 for company profile…');
+        var profile = null;
+        try {
+          var seedStr = surfeSeed ? (' Seed from Surfe: ' + JSON.stringify({
+            name: surfeSeed.name || surfeSeed.companyName,
+            domain: surfeSeed.domain || (surfeSeed.websites && surfeSeed.websites[0]),
+            industry: surfeSeed.industry
+          })) : '';
+          var pRaw = await aiCallWithFallback([
+            { role: 'system', content: 'Return strictly valid JSON, no markdown fences.' },
+            { role: 'user', content:
+              'You are a Brazilian B2B sales analyst. Describe the Brazilian company named "' + name + '".' + seedStr +
+              ' Respond ONLY with JSON of shape {"name":string,"domain":string,"sector":"telecom|banco|fintech|varejo|seguros|bpo|logistica|saude|energia|educacao|aviacao|outros","description_pt":string,"hq":string,"employees_est":number}. ' +
+              'If you are not confident the company exists in Brazil, return {"name":"","domain":"","sector":"outros","description_pt":"","hq":"","employees_est":0}.' }
+          ]);
+          profile = parseJsonLoose(pRaw);
+        } catch (e) { log('&nbsp;&nbsp;↳ AI error: ' + (e && e.message || e)); }
+        if (!profile || !profile.name) {
+          log('⛔ Could not identify company. Stopping.');
+          return;
+        }
+        log('&nbsp;&nbsp;↳ name="' + profile.name + '" · sector=' + (profile.sector || '?') + ' · domain=' + (profile.domain || '?'));
+
+        log('🎯 <b>ICP</b>: scoring AI Rudder fit (Claude)…');
+        var icp = null;
+        try {
+          var iRaw = await aiCallWithFallback([
+            { role: 'system', content: 'Return strictly valid JSON, no markdown fences.' },
+            { role: 'user', content:
+              'AI Rudder sells AI voice agents / outbound call automation to Brazilian enterprises with high-volume voice operations. Primary fit: telecom, banco, fintech, seguros, varejo, BPO, logística, saúde, energia. ' +
+              'Score the company: ' + JSON.stringify(profile) + '. ' +
+              'Return JSON only: {"icp":boolean,"fit":0-100,"intent":0-100,"timing":0-100,"score":"A+|A|B+|B|C","reason":string}.' }
+          ]);
+          icp = parseJsonLoose(iRaw);
+        } catch (e) { log('&nbsp;&nbsp;↳ ICP error: ' + (e && e.message || e)); }
+        if (!icp) { log('⛔ ICP scoring failed. Stopping.'); return; }
+        log('&nbsp;&nbsp;↳ icp=' + icp.icp + ' · fit=' + icp.fit + ' · score=' + icp.score + ' — ' + (icp.reason || ''));
+        if (!icp.icp) { log('🚫 Not an ICP match. Not importing.'); return; }
+
+        if (profile.domain && typeof Surfe !== 'undefined' && typeof Surfe.enrichOrganization === 'function') {
+          log('✨ <b>Surfe</b>: enriching ' + profile.domain + '…');
+          try {
+            var enr = await Surfe.enrichOrganization(profile.domain);
+            log('&nbsp;&nbsp;↳ enrichment ok');
+            if (enr && typeof enr === 'object') {
+              try { localStorage.setItem('rudder.enrich.' + profile.domain, JSON.stringify({ when: Date.now(), data: enr })); } catch (_) {}
+            }
+          } catch (e) { log('&nbsp;&nbsp;↳ enrichment skipped: ' + (e && e.message || e)); }
+        }
+
+        var rec = {
+          rank: (COMPANIES.length || 0) + 1,
+          name: profile.name,
+          domain: profile.domain || '',
+          sector: profile.sector || 'outros',
+          fit: icp.fit || 0,
+          intent: icp.intent || 0,
+          timing: icp.timing || 0,
+          score: icp.score || 'B',
+          imported: true,
+          _aiReason: icp.reason || '',
+          _description_pt: profile.description_pt || '',
+          _hq: profile.hq || '',
+          _employees_est: profile.employees_est || 0
+        };
+        COMPANIES.push(rec);
+        try { renderRanking(COMPANIES); } catch (e) { log('render error: ' + e.message); }
+        log('💾 <b>Imported</b> as #' + rec.rank + ' → ' + rec.name);
+
+        setTimeout(function () {
+          var card = document.querySelector('#rankGrid .rank-card[data-name="' + (rec.name || '').toLowerCase().replace(/"/g, '\\"') + '"]');
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.style.outline = '3px solid #0580BD';
+            card.style.outlineOffset = '4px';
+            setTimeout(function () { card.style.outline = ''; card.style.outlineOffset = ''; }, 2800);
+          }
+        }, 250);
+
+        search.value = rec.name;
+        try { applyRankFilters(); } catch (_) {}
+        recomputePanel();
+      } catch (e) {
+        log('💥 Fatal: ' + (e && e.message || e));
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+  });
+})();
+
+</script>
 </body>
 </html>
