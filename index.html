@@ -6523,6 +6523,108 @@ const COMPANIES = [
   {rank:133, name:'Acerto',                  domain:'acerto.com.br',          sector:'fintech', fit:78, intent:82, timing:76, score:'B+', surfeHint:{pt:'Negociação online rápida · ecossistema de cobrança', en:'Fast online renegotiation · collections ecosystem'}}
 ];
 
+/* ─── Imported companies persistence (Smart Org Search miss-path) ───
+   Imports added at runtime via the AI miss-path are persisted to
+   localStorage and merged back into COMPANIES on every boot so they
+   survive reloads, deploys and login sessions on the same browser. */
+const IMPORTED_STORAGE = 'rudder_imported_v1';
+
+function companyKey(c){
+  const d = (c && c.domain || '').toLowerCase().trim();
+  if(d) return 'd:' + d;
+  const n = (c && c.name || '').toLowerCase().trim().replace(/\s+/g,' ');
+  return n ? 'n:' + n : '';
+}
+
+function loadImportedCompanies(){
+  try{
+    const raw = localStorage.getItem(IMPORTED_STORAGE);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(c => c && (c.name || c.domain)) : [];
+  }catch(_){ return []; }
+}
+
+function persistImportedCompanies(){
+  try{
+    const imports = COMPANIES.filter(c => c && c.imported);
+    localStorage.setItem(IMPORTED_STORAGE, JSON.stringify(imports));
+  }catch(_){}
+}
+
+(function mergeImportedOnBoot(){
+  const stored = loadImportedCompanies();
+  if(!stored.length) return;
+  const seen = new Set();
+  COMPANIES.forEach(c => { const k = companyKey(c); if(k) seen.add(k); });
+  stored.forEach(c => {
+    const k = companyKey(c);
+    if(!k || seen.has(k)) return;
+    c.imported = true;
+    c.rank = COMPANIES.length + 1;
+    COMPANIES.push(c);
+    seen.add(k);
+  });
+})();
+
+function clearImportedCompanies(){
+  const n = COMPANIES.filter(c => c && c.imported).length;
+  const lang = document.documentElement.lang;
+  if(!n){
+    if(typeof toast === 'function'){
+      toast(lang==='pt-BR' ? 'Nenhuma importada para limpar.' : lang==='zh-CN' ? '没有要清除的导入公司。' : 'No imported companies to clear.', 'ok');
+    }
+    return;
+  }
+  const msg = lang==='pt-BR' ? `Remover ${n} empresa${n===1?'':'s'} importada${n===1?'':'s'}? A lista base (131) permanece.`
+            : lang==='zh-CN' ? `删除 ${n} 个已导入公司?内置种子不变。`
+            : `Remove ${n} imported compan${n===1?'y':'ies'}? Built-in seed stays.`;
+  if(!confirm(msg)) return;
+  for(let i = COMPANIES.length - 1; i >= 0; i--){
+    if(COMPANIES[i] && COMPANIES[i].imported) COMPANIES.splice(i, 1);
+  }
+  try{ localStorage.removeItem(IMPORTED_STORAGE); }catch(_){}
+  try{ if(typeof renderRanking === 'function') renderRanking(COMPANIES); }catch(_){}
+  try{ if(typeof renderHeroCommandCenter === 'function') renderHeroCommandCenter(); }catch(_){}
+  try{ injectClearImportsBtn(); }catch(_){}
+  if(typeof toast === 'function'){
+    toast(lang==='pt-BR' ? `${n} importada${n===1?'':'s'} removida${n===1?'':'s'}.` : lang==='zh-CN' ? `已清除 ${n} 个导入。` : `Cleared ${n} imported.`, 'ok');
+  }
+}
+
+function injectClearImportsBtn(){
+  const tools = document.querySelector('.rank-tools');
+  if(!tools) return;
+  let btn = document.getElementById('rankClearImportsBtn');
+  const count = COMPANIES.filter(c => c && c.imported).length;
+  const role = (typeof currentUser === 'function' && currentUser()?.role) || '';
+  if(!count || role !== 'owner'){
+    if(btn) btn.remove();
+    return;
+  }
+  if(!btn){
+    btn = document.createElement('button');
+    btn.id = 'rankClearImportsBtn';
+    btn.type = 'button';
+    btn.setAttribute('data-role','owner');
+    btn.className = 'owner-only';
+    btn.title = 'Clear AI-imported companies (built-in seed unaffected)';
+    btn.style.cssText = 'margin-left:auto;padding:6px 12px;border-radius:999px;background:transparent;border:1px dashed var(--border-2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap';
+    btn.innerHTML =
+      '<i data-lucide="eraser" aria-hidden="true" style="width:13px;height:13px"></i>' +
+      '<span class="lang-pt">Limpar importadas · <span id="rankClearImportsCount"></span></span>' +
+      '<span class="lang-en">Clear imports · <span id="rankClearImportsCount2"></span></span>' +
+      '<span class="lang-zh">清除导入 · <span id="rankClearImportsCount3"></span></span>';
+    btn.addEventListener('click', clearImportedCompanies);
+    tools.appendChild(btn);
+    try{ if(window.lucide) window.lucide.createIcons({ root: btn }); }catch(_){}
+  }
+  const s = String(count);
+  const a = btn.querySelector('#rankClearImportsCount');   if(a) a.textContent = s;
+  const b = btn.querySelector('#rankClearImportsCount2');  if(b) b.textContent = s;
+  const cEl = btn.querySelector('#rankClearImportsCount3'); if(cEl) cEl.textContent = s;
+}
+
 const BRIEFINGS = [
   {
     name:'Vivo', tag:'telecom',
@@ -9885,6 +9987,7 @@ function boot(){
   setupRankingHeroActions();  // live ranking intro chips
   updateRankingActionStrip(); // sync ranking live state
   extendPerItemAI();          // NEW — per-card AI on Pain Map, GTM, Revenue what-if, Cadência, Ranking
+  try{ injectClearImportsBtn(); }catch(_){}  // owner-only pill when imports exist
   icons();
   observeReveal();
 }
@@ -16098,7 +16201,9 @@ icons();
           _employees_est: profile.employees_est || 0
         };
         COMPANIES.push(rec);
+        try { persistImportedCompanies(); } catch (_) {}
         try { renderRanking(COMPANIES); } catch (e) { log('render error: ' + e.message); }
+        try { injectClearImportsBtn(); } catch (_) {}
         log('💾 <b>Imported</b> as #' + rec.rank + ' → ' + rec.name);
 
         setTimeout(function () {
